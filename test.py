@@ -1,19 +1,17 @@
-import pickle
-from sklearn.datasets import load_iris
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-from sklearn.linear_model import LinearRegression
+import tensorflow as tf
+import numpy as np
 
-iris=load_iris()
-x=iris.data
-y=iris.target
-model=LinearRegression()
-x_train,x_test,y_train,y_test=train_test_split(x,y,test_size=0.40,random_state=0)
+mnist = tf.keras.datasets.mnist
 
+(X_train, y_train), (X_test,  y_test) = mnist.load_data()
 
+X_train = tf.keras.utils.normalize(X_train, axis=1)
+X_test = tf.keras.utils.normalize(X_test, axis=1)
 
-model=pickle.load(open('model.pkl','rb'))
-y_pred=model.predict(x_test)
-accuracy=accuracy_score(y_test,y_pred)
-print(accuracy)
-
+model = tf.keras.models.load_model("model.h5")
+# model = tf.keras.models.load_model(
+#     "models"
+# )
+values = model.predict(X_test[67].reshape(1, 28, 28))
+value = np.argmax(values)
+print(value)
