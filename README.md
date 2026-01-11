@@ -4,9 +4,9 @@ Draw any digit (0-9) on the interactive canvas and watch our deep learning model
 
 ## 🌐 Live Demo
 
-🔗 **[Try it live on Vercel!](https://digit-recognition-app3.vercel.app/)**
+🔗 **[Try it live on Render!](https://digit-recognition-app-xzwb.onrender.com)**
 
-![Digit Recognition Demo](cover.jpeg)
+
 
 ## 🧠 How It Works
 
@@ -19,15 +19,12 @@ Draw any digit (0-9) on the interactive canvas and watch our deep learning model
 
 ```
 Digit-Recognition-app/
-├── api/
-│   └── predict.py          # Serverless API for predictions (ONNX)
-├── public/
-│   └── index.html          # Main web interface
-├── static/
-│   ├── style.css           # Premium styling & animations
-│   └── script.js           # Canvas & API logic
+├── app.py                  # Flask production server (Render/Local)
+├── public/                 # Static web assets
+│   └── index.html          # Main interface
+├── static/                 # CSS and JS files
 ├── model.onnx              # Optimized AI model (~470KB)
-├── vercel.json             # Deployment configuration
+├── render.yaml             # Render deployment configuration
 ├── requirements.txt        # Production dependencies
 └── README.md               # Project documentation
 ```
