@@ -6,27 +6,45 @@ import numpy as np
 from PIL import Image
 import io
 
-# Add parent directory to path to access model
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 app = Flask(__name__)
 
-# Global model variable
-model = None
+# Global model variables
+interpreter = None
+input_details = None
+output_details = None
 
 def load_model():
-    """Load the TensorFlow model lazily"""
-    global model
-    if model is None:
+    """Load the TFLite model lazily"""
+    global interpreter, input_details, output_details
+    if interpreter is None:
         try:
-            import tensorflow as tf
-            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model.h5')
-            model = tf.keras.models.load_model(model_path)
-            print("Model loaded successfully")
+            # Try importing tflite_runtime first (preferred for small size)
+            try:
+                import tflite_runtime.interpreter as tflite
+            except ImportError:
+                # Fallback to full tensorflow if available (local development)
+                try:
+                    import tensorflow.lite as tflite
+                except ImportError:
+                    import tensorflow as tf
+                    tflite = tf.lite
+
+            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model.tflite')
+            if not os.path.exists(model_path):
+                # Fallback check in same directory
+                model_path = os.path.join(os.path.dirname(__file__), 'model.tflite')
+            
+            interpreter = tflite.Interpreter(model_path=model_path)
+            interpreter.allocate_tensors()
+            
+            input_details = interpreter.get_input_details()
+            output_details = interpreter.get_output_details()
+            
+            print("TFLite Model loaded successfully")
         except Exception as e:
             print(f"Error loading model: {e}")
             raise
-    return model
+    return interpreter
 
 @app.route('/api/predict-digit', methods=['POST', 'OPTIONS'])
 def predict_digit():
@@ -35,45 +53,48 @@ def predict_digit():
         return '', 204
     
     try:
-        # Load model
-        model = load_model()
+        # Load model/interpreter
+        load_model()
         
         # Get image data
         data = request.get_json(silent=True)
         if not data or 'image' not in data:
             return jsonify({"error": "No image data provided"}), 400
             
-        image = data['image'].split(",")[1]
-        image_data = base64.urlsafe_b64decode(image)
+        image_str = data['image'].split(",")[1]
+        image_data = base64.urlsafe_b64decode(image_str)
         image = Image.open(io.BytesIO(image_data))
         
-        # Convert the RGB image to grayscale image
+        # Preprocessing (same as before)
         image = image.convert("L")
-
-        # Resize the image to 28x28
         image = image.resize((28, 28))
-
-        # Convert the image into numpy array
         image = np.array(image)
+        
+        # TFLite specific: Check if input needs 4D (1, 28, 28, 1) or 3D (1, 28, 28)
+        # Most MNIST models are (1, 28, 28, 1) or (1, 784)
+        input_shape = input_details[0]['shape']
+        
+        if len(input_shape) == 4:
+            # (1, 28, 28, 1)
+            image = image.reshape(1, 28, 28, 1)
+        else:
+            # (1, 28, 28)
+            image = image.reshape(1, 28, 28) 
 
-        # Reshape the image for the model
-        image = image.reshape(1, 28, 28) 
-
-        # Normalize the pixel values in image
-        image = image / 255.
-
-        # Set the datatype of image as float32
+        image = image / 255.0
         image = image.astype(np.float32)
         
-        # Make prediction
-        values = model.predict(image, verbose=0)
-        value = np.argmax(values)
+        # Run inference
+        interpreter.set_tensor(input_details[0]['index'], image)
+        interpreter.invoke()
         
-        # Get confidence as percentage
-        confidence = float(np.max(values)) * 100
+        # Get results
+        output_data = interpreter.get_tensor(output_details[0]['index'])
+        prediction = int(np.argmax(output_data[0]))
+        confidence = float(np.max(output_data[0])) * 100
         
         response = { 
-            "prediction": str(value),
+            "prediction": str(prediction),
             "confidence": f"{confidence:.2f}"
         }
 

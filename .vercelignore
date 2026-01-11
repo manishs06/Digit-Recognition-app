@@ -30,21 +30,17 @@ Thumbs.db
 test.py
 train.py
 model.pkl
-# model.h5 (REMOVED TO ALLOW DEPLOYMENT)
-# model.h5
+model.h5
 
 # Templates (using public/index.html instead)
 templates/
 
 # Large model files
-# *.h5 (REMOVED TO ALLOW DEPLOYMENT)
-# *.h5
 *.hdf5
 *.pb
-*.tflite
+# *.tflite (REMOVED TO ALLOW DEPLOYMENT)
 *.onnx
 .cache/
 __pycache__/
 *.pyc
 .pyc
-
