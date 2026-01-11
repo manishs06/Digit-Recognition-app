@@ -12,36 +12,45 @@ app = Flask(__name__)
 # Global ONNX session variable
 session = None
 
+def get_model_path():
+    """Find the ONNX model file in the current environment"""
+    # Define possible paths relative to this script
+    possible_paths = [
+        # Local & Vercel deployment root
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model.onnx'),   # api/../model.onnx
+        os.path.join(os.path.dirname(__file__), 'model.onnx'),                   # api/model.onnx
+        os.path.join(os.getcwd(), 'model.onnx'),                                 # ./model.onnx
+        'model.onnx',                                                            # relative model.onnx
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+            
+    # Try absolute path based on standard Vercel layout
+    abs_path = os.path.join('/var/task', 'model.onnx')
+    if os.path.exists(abs_path):
+        return abs_path
+        
+    return None
+
 def load_model():
-    """Load the ONNX model lazily with robust path finding"""
+    """Load the ONNX model lazily with simplified error handling"""
     global session
     if session is None:
         try:
             import onnxruntime as ort
             
-            # Try multiple possible paths for the model file in serverless env
-            possible_paths = [
-                os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model.onnx'), # Root from /api
-                os.path.join(os.path.dirname(__file__), 'model.onnx'),                 # Same dir as script
-                os.path.join(os.getcwd(), 'model.onnx'),                               # Current working dir
-                '/var/task/model.onnx'                                                 # Vercel specific
-            ]
-            
-            model_path = None
-            for path in possible_paths:
-                if os.path.exists(path):
-                    model_path = path
-                    break
-            
+            model_path = get_model_path()
             if not model_path:
-                raise FileNotFoundError(f"model.onnx not found. Checked: {possible_paths}")
+                raise FileNotFoundError("Could not find model.onnx in any expected location.")
             
-            # Use CPU execution provider (stable for Vercel)
+            # Use CPUExecutionProvider (standard for serverless)
             session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
-            print(f"ONNX Model loaded successfully from {model_path}")
+            print(f"Model loaded successfully from {model_path}")
         except Exception as e:
-            print(f"Error loading model: {e}")
-            raise
+            # Re-raise so it gets caught in predict_digit
+            raise RuntimeError(f"Failed to initialize ONNX session: {str(e)}")
     return session
 
 @app.route('/api/predict-digit', methods=['POST', 'OPTIONS'])
@@ -64,30 +73,28 @@ def predict_digit():
         image = Image.open(io.BytesIO(image_data))
         
         # Preprocessing
-        image = image.convert("L")
-        image = image.resize((28, 28))
-        image = np.array(image)
+        image = image.convert("L").resize((28, 28))
+        image = np.array(image).astype(np.float32) / 255.0
         
-        # Determine exact input shape required by the model
+        # Get input metadata
         input_meta = ort_session.get_inputs()[0]
         input_name = input_meta.name
-        input_shape = input_meta.shape # e.g. [None, 28, 28] or [None, 784]
+        input_shape = input_meta.shape
         
-        # Handle different potential MNIST model architectures
+        # Reshape based on what the model expects
         if len(input_shape) == 4:
-            # Expected: (batch, height, width, channels) -> (1, 28, 28, 1)
-            image = image.reshape(1, 28, 28, 1)
+            # (batch, height, width, 1) or (batch, 1, height, width)
+            if input_shape[1] == 1:
+                image = image.reshape(1, 1, 28, 28)
+            else:
+                image = image.reshape(1, 28, 28, 1)
         elif len(input_shape) == 2:
-            # Expected: (batch, flattened) -> (1, 784)
+            # (batch, flattened)
             image = image.reshape(1, 784)
         else:
-            # Default to 3D if that's what's left: (1, 28, 28)
+            # (batch, height, width)
             image = image.reshape(1, 28, 28)
 
-        # Normalize and set type
-        image = image / 255.0
-        image = image.astype(np.float32)
-        
         # Run inference
         outputs = ort_session.run(None, {input_name: image})
         output_data = outputs[0]
@@ -101,14 +108,14 @@ def predict_digit():
         })
         
     except Exception as e:
-        # Return full error details to help debugging the 500 error
-        error_msg = f"Error in prediction: {str(e)}\n{traceback.format_exc()}"
-        print(error_msg)
+        # Log to server console and return JSON error
+        print(f"Prediction Error: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if os.environ.get('VERCEL_ENV') != 'production' else "truncated"
         }), 500
 
-# Vercel serverless handler
+# Entry point for Vercel
 def handler(event, context):
     return app(event, context)
