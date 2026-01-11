@@ -14,3 +14,20 @@ Draw any digit (0-9) on the interactive canvas and watch our deep learning model
 2. **Process**: The drawing is captured as an image and sent to our Python backend.
 3. **Analyze**: A deep neural network (trained on the MNIST dataset) analyzes the image using **ONNX Runtime** for lightning-fast inference.
 4. **Predict**: The model identifies the digit and returns its prediction along with a confidence score.
+
+## 📁 Project Structure
+
+```
+Digit-Recognition-app/
+├── api/
+│   └── predict.py          # Serverless API for predictions (ONNX)
+├── public/
+│   └── index.html          # Main web interface
+├── static/
+│   ├── style.css           # Premium styling & animations
+│   └── script.js           # Canvas & API logic
+├── model.onnx              # Optimized AI model (~470KB)
+├── vercel.json             # Deployment configuration
+├── requirements.txt        # Production dependencies
+└── README.md               # Project documentation
+```
