@@ -1,4 +1,4 @@
-onnxruntime
+onnxruntime-cpu
 Flask
 numpy
 pillow
