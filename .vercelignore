@@ -31,6 +31,7 @@ test.py
 train.py
 model.pkl
 model.h5
+model.tflite
 
 # Templates (using public/index.html instead)
 templates/
@@ -38,8 +39,7 @@ templates/
 # Large model files
 *.hdf5
 *.pb
-# *.tflite (REMOVED TO ALLOW DEPLOYMENT)
-*.onnx
+# *.onnx (REMOVED TO ALLOW DEPLOYMENT)
 .cache/
 __pycache__/
 *.pyc

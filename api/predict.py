@@ -8,43 +8,27 @@ import io
 
 app = Flask(__name__)
 
-# Global model variables
-interpreter = None
-input_details = None
-output_details = None
+# Global ONNX session variable
+session = None
 
 def load_model():
-    """Load the TFLite model lazily"""
-    global interpreter, input_details, output_details
-    if interpreter is None:
+    """Load the ONNX model lazily"""
+    global session
+    if session is None:
         try:
-            # Try importing tflite_runtime first (preferred for small size)
-            try:
-                import tflite_runtime.interpreter as tflite
-            except ImportError:
-                # Fallback to full tensorflow if available (local development)
-                try:
-                    import tensorflow.lite as tflite
-                except ImportError:
-                    import tensorflow as tf
-                    tflite = tf.lite
-
-            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model.tflite')
+            import onnxruntime as ort
+            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model.onnx')
             if not os.path.exists(model_path):
                 # Fallback check in same directory
-                model_path = os.path.join(os.path.dirname(__file__), 'model.tflite')
+                model_path = os.path.join(os.path.dirname(__file__), 'model.onnx')
             
-            interpreter = tflite.Interpreter(model_path=model_path)
-            interpreter.allocate_tensors()
-            
-            input_details = interpreter.get_input_details()
-            output_details = interpreter.get_output_details()
-            
-            print("TFLite Model loaded successfully")
+            # Use CPU execution provider for deployment
+            session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+            print("ONNX Model loaded successfully")
         except Exception as e:
             print(f"Error loading model: {e}")
             raise
-    return interpreter
+    return session
 
 @app.route('/api/predict-digit', methods=['POST', 'OPTIONS'])
 def predict_digit():
@@ -53,8 +37,8 @@ def predict_digit():
         return '', 204
     
     try:
-        # Load model/interpreter
-        load_model()
+        # Load model/session
+        ort_session = load_model()
         
         # Get image data
         data = request.get_json(silent=True)
@@ -65,31 +49,34 @@ def predict_digit():
         image_data = base64.urlsafe_b64decode(image_str)
         image = Image.open(io.BytesIO(image_data))
         
-        # Preprocessing (same as before)
+        # Preprocessing
         image = image.convert("L")
         image = image.resize((28, 28))
         image = np.array(image)
         
-        # TFLite specific: Check if input needs 4D (1, 28, 28, 1) or 3D (1, 28, 28)
-        # Most MNIST models are (1, 28, 28, 1) or (1, 784)
-        input_shape = input_details[0]['shape']
+        # Reshape for the model - ONNX models from Keras usually expect (batch, ...)
+        # Based on previous code, the model expects (1, 28, 28) or (1, 784) or (1, 28, 28, 1)
+        # We need to match the input name and shape of the ONNX model
+        input_name = ort_session.get_inputs()[0].name
+        input_shape = ort_session.get_inputs()[0].shape
         
         if len(input_shape) == 4:
             # (1, 28, 28, 1)
             image = image.reshape(1, 28, 28, 1)
-        else:
+        elif len(input_shape) == 3:
             # (1, 28, 28)
-            image = image.reshape(1, 28, 28) 
+            image = image.reshape(1, 28, 28)
+        else:
+            # (1, 784)
+            image = image.reshape(1, 784)
 
         image = image / 255.0
         image = image.astype(np.float32)
         
         # Run inference
-        interpreter.set_tensor(input_details[0]['index'], image)
-        interpreter.invoke()
+        outputs = ort_session.run(None, {input_name: image})
+        output_data = outputs[0]
         
-        # Get results
-        output_data = interpreter.get_tensor(output_details[0]['index'])
         prediction = int(np.argmax(output_data[0]))
         confidence = float(np.max(output_data[0])) * 100
         

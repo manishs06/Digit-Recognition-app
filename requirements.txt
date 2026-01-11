@@ -1,4 +1,4 @@
-tflite-runtime
+onnxruntime
 Flask
 numpy
 pillow
