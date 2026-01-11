@@ -6,7 +6,7 @@ A stunning, modern web application for handwritten digit recognition powered by 
 
 ## 🌐 Live Demo
 
-🔗 **[Try it live on Vercel!](https://digit-recognition-app-manishs06.vercel.app)** 
+🔗 **[Try it live on Vercel!](https://digit-recognition-app3.vercel.app/)** 
 
 ![Digit Recognition Demo](cover.jpeg)
 
