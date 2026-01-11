@@ -281,3 +281,5 @@ Works perfectly on all devices with touch support.
 ---
 
 **Happy Drawing! 🎨✨**
+
+# Smile-detection
